@@ -2,7 +2,7 @@
 name: aif-implement
 description: Execute implementation tasks from the current plan. Works through tasks sequentially, marks completion, and preserves progress for continuation across sessions. Use when user says "implement", "start coding", "execute plan", or "continue implementation".
 argument-hint: '[--list] [--without-plan <description>] [@plan-file-or-directory] [task-id or "status"]'
-allowed-tools: Read Write Edit Glob Grep TaskList TaskGet TaskUpdate AskUserQuestion Questions mcp__handoff__handoff_sync_status mcp__handoff__handoff_push_plan mcp__handoff__handoff_get_task mcp__handoff__handoff_list_tasks mcp__handoff__handoff_update_task
+allowed-tools: Read Write Edit Glob Grep Bash(ai-factory dispatch *) TaskList TaskGet TaskUpdate AskUserQuestion Questions mcp__handoff__handoff_sync_status mcp__handoff__handoff_push_plan mcp__handoff__handoff_get_task mcp__handoff__handoff_list_tasks mcp__handoff__handoff_update_task
 disable-model-invocation: false
 ---
 
@@ -177,7 +177,7 @@ Before executing plan-backed tasks, read [project context and past experience](r
 
 ### Plan discovery and integrity
 
-Before selecting any plan-backed artifact, read [discovery, research drift, and Handoff binding](references/IMPLEMENT-DISCOVERY.md). Priority: explicit path → branch full/ultra → single named artifact → fast plan → fix-plan redirect.
+Before selecting any plan-backed artifact, read [discovery, research drift, and Handoff binding](references/IMPLEMENT-DISCOVERY.md). Priority: explicit path → branch full/ultra → single named artifact → fast plan → fix-plan redirect. Once the plan is resolved, apply the optional `implement` [phase dispatch](references/IMPLEMENT-DISPATCH.md) before Step 1.
 
 Classify ultra by exactly one `<!-- aif:plan-mode:ultra -->` before folder assumptions. Ignore unrelated auto-discovered directories, but STOP for invalid explicit bundles, malformed marked bundles, escaping/broken Phase Index links, or tasks without exactly one phase specification. Read the entire entrypoint and the active task's complete phase; only `index.md` owns progress. Research revisions are drift checks; committed Research Context remains scope. Preserve exact `/aif-fix` redirection and `<!-- ultra-phase:<relative-path> -->` Handoff serialization.
 

@@ -59,20 +59,21 @@ export const DISPATCH_PHASES = [
   // aif-loop phases
   'plan', 'produce', 'prepare', 'evaluate', 'critique', 'refine',
   // spec-driven workflow phases (aif-plan -> aif-implement -> aif-review)
-  'implement', 'review',
+  'spec-plan', 'implement', 'review',
 ] as const;
 export type DispatchPhase = typeof DISPATCH_PHASES[number];
 
 export interface PhaseDispatch {
   agent: string;     // dispatch-agent id: claude-code | gemini-cli | antigravity | chatgpt-cli | openrouter-cli | <custom>
   model?: string;    // optional; falls back to the agent's defaultModel
+  effort?: string;   // optional reasoning effort, passed through the {effort} placeholder
   timeoutMs?: number; // optional auto-mode cap for this phase; positive integer ms
 }
 
 export type PhasesConfig = Partial<Record<DispatchPhase, PhaseDispatch>>;
 
 export interface AgentRunOverride {
-  command?: string;       // argv template, e.g. "claude --model {model} -p {prompt}" (not a shell string)
+  command?: string;       // argv template, e.g. "claude --model {model} --effort={effort} -p {prompt}" (not a shell string)
   defaultModel?: string;
 }
 
@@ -192,11 +193,13 @@ function normalizePhases(raw: unknown): PhasesConfig | undefined {
     if (!entry || typeof entry !== 'object') continue;
     const agent = (entry as { agent?: unknown }).agent;
     const model = (entry as { model?: unknown }).model;
+    const effort = (entry as { effort?: unknown }).effort;
     const timeoutMs = (entry as { timeoutMs?: unknown }).timeoutMs;
     if (typeof agent !== 'string' || !agent) continue; // agent required
     out[phase] = {
       agent,
       ...(typeof model === 'string' && model ? { model } : {}),
+      ...(typeof effort === 'string' && effort ? { effort } : {}),
       ...(typeof timeoutMs === 'number' && Number.isInteger(timeoutMs) && timeoutMs > 0 ? { timeoutMs } : {}),
     };
   }

@@ -654,7 +654,8 @@ When GitHub-backed extension refreshes are frequent, set `GITHUB_TOKEN` to raise
 ### Cross-Agent Dispatch
 
 Optional top-level fields configure phase-boundary dispatch for `/aif-loop` and the
-spec-driven workflow (`/aif-implement`, `/aif-review`). `ai-factory init`, `update`,
+spec-driven workflow (`/aif-plan`, `/aif-implement`, `/aif-review`). Use it to run each
+step with a different agent, model, or effort, for example planning with Fable at high effort. `ai-factory init`, `update`,
 and `upgrade` preserve these fields; they are user-owned, not managed installation state.
 
 ```json
@@ -662,6 +663,7 @@ and `upgrade` preserve these fields; they are user-owned, not managed installati
   "dispatch": "manual",
   "phases": {
     "plan": { "agent": "claude-code", "model": "opus" },
+    "spec-plan": { "agent": "claude-code", "model": "fable", "effort": "high" },
     "implement": { "agent": "antigravity", "timeoutMs": 900000 }
   },
   "dispatchAgents": {
@@ -671,10 +673,10 @@ and `upgrade` preserve these fields; they are user-owned, not managed installati
 ```
 
 - `dispatch` — `manual` (default) prints instructions and never spawns anything; `auto` spawns the target CLI. Any invalid value behaves as `manual`.
-- `phases.<phase>` — targets per phase. Valid phases: `plan`, `produce`, `prepare`, `evaluate`, `critique`, `refine` (aif-loop) plus `implement`, `review` (spec-driven workflow). `model` falls back to the agent's `defaultModel`; `timeoutMs` is a positive integer cap for auto spawns (default 600000).
+- `phases.<phase>` — targets per phase. Valid phases: `plan`, `produce`, `prepare`, `evaluate`, `critique`, `refine` (aif-loop) plus `spec-plan`, `implement`, `review` (spec-driven workflow: `/aif-plan`, `/aif-implement`, `/aif-review`). `plan` belongs to aif-loop only; `/aif-plan` reads `spec-plan`. `model` falls back to the agent's `defaultModel`; `effort` is optional and is passed only through an `{effort}` placeholder (the built-in `claude-code` command passes it as `--effort=<level>`: `low`, `medium`, `high`, `xhigh`, `max`). An `effort` set for an agent whose command has no `{effort}` placeholder is reported on stderr instead of being silently ignored; `timeoutMs` is a positive integer cap for auto spawns (default 600000).
 - `dispatchAgents` — per-agent `command` / `defaultModel` overrides. Built-in dispatch ids: `claude-code`, `gemini-cli`, `antigravity`, `chatgpt-cli`, `openrouter-cli`. An agent id that resolves to an installed runtime (including extension-provided ones) maps through its `skillsCliAgent`.
 
-`command` is an **argv template, not a shell string**: it is split on whitespace, then `{model}`, `{phase}`, `{prompt}` are substituted per token in one pass. Values remain literal, including `$$`, `$&` and placeholder-like text inside a prompt/model. Quotes and shell metacharacters have no special meaning, and paths with spaces cannot be expressed as one token; prompts always travel as a single argv element, never through a shell.
+`command` is an **argv template, not a shell string**: it is split on whitespace, then `{model}`, `{phase}`, `{prompt}`, `{effort}` are substituted per token in one pass. `{effort}` is optional: a token that contains it is dropped when the phase sets no `effort`, so write it as one token such as `--effort={effort}`. Values remain literal, including `$$`, `$&` and placeholder-like text inside a prompt/model. Quotes and shell metacharacters have no special meaning, and paths with spaces cannot be expressed as one token; prompts always travel as a single argv element, never through a shell.
 
 `ai-factory dispatch <phase> [--prompt <text>] [--print] [--json]` resolves one phase:
 
@@ -688,10 +690,21 @@ exactly one object with `schema_version: 1`, the requested `phase`, and `status`
 
 | Status | Meaning | Additional fields |
 |---|---|---|
-| `noop` | Execute the phase in-process | `reason`: `no-config` or `no-phase-entry` |
-| `manual` | No child was started | `agent`, `model`, `command: {file, args}`, `instructions` |
+| `noop` | Execute the phase in-process | `reason`: `no-config`, `no-phase-entry`, or `nested-dispatch` |
+| `manual` | No child was started | `agent`, `model`, `effort` (only when set), `command: {file, args}`, `instructions` |
 | `completed` | The child exited successfully | Phase output still requires validation |
 | `error` | Resolution or child execution failed | `reason` or `error`; non-zero exit |
+
+Auto mode sets `AI_FACTORY_DISPATCHED_PHASE=<phase>` in the child environment. When
+the child asks to dispatch that same phase again (a dispatched `/aif-plan` runs the same
+skill), the dispatcher returns a `noop` with reason `nested-dispatch` and never spawns, so
+the child runs the phase in-process instead of recursing. Other phases resolve normally.
+The plain CLI stays silent for this no-op.
+
+An auto-dispatched spec-driven skill runs non-interactively in the target CLI (for example
+`claude -p`). It does not see the parent conversation, so the skill passes its original
+arguments in the prompt, uses non-interactive defaults, and reports unresolved decisions
+instead of asking.
 
 Child stdout is redirected to stderr in JSON mode; it cannot impersonate a
 dispatcher result. `--print --json` returns `manual` even under auto configuration.

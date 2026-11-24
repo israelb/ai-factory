@@ -4,13 +4,13 @@ import type { AgentRunOverride } from './config.js';
 export interface AgentRunSpec {
   id: string;          // 'claude-code'
   displayName: string;
-  command: string;     // template with {model} {phase} {prompt}
+  command: string;     // template with {model} {phase} {prompt} and optional {effort}
   defaultModel: string;
 }
 
 export const BUILTIN_DISPATCH_AGENTS: Record<string, AgentRunSpec> = {
   'claude-code': { id: 'claude-code', displayName: 'Claude Code',
-    command: 'claude --model {model} -p {prompt}', defaultModel: 'sonnet' },
+    command: 'claude --model {model} --effort={effort} -p {prompt}', defaultModel: 'sonnet' },
   'gemini-cli':  { id: 'gemini-cli',  displayName: 'Gemini CLI',
     command: 'gemini -m {model} -p {prompt}',      defaultModel: 'gemini-2.5-pro' },
   antigravity:   { id: 'antigravity', displayName: 'Antigravity',

@@ -138,6 +138,9 @@ Plans implementation for a feature or task:
 /aif-plan full +coupling Change receipt pricing   # Optional boundary analysis
 ```
 
+Optional `phases.spec-plan` in `.ai-factory.json` routes planning to another agent,
+model, or effort, for example Fable at high effort; see [Per-step agent and model](workflow.md#per-step-agent-and-model).
+
 `+coupling` is off by default and independent of fast/full/ultra. In the leading
 option segment, it loads the self-contained [planning methodology](../skills/aif-plan/references/COUPLING-PLAN.md)
 to compare producer/consumer boundaries and alternatives with their costs inside
