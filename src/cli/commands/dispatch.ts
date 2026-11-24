@@ -1,11 +1,11 @@
 import { loadConfig, DISPATCH_PHASES } from '../../core/config.js';
-import { resolvePhaseDispatch, formatManualInstructions, buildAgentCommand, runAuto, isNestedDispatch, isEffortUnsupported } from '../../core/dispatch.js';
+import { resolvePhaseDispatch, formatManualInstructions, buildAgentCommand, runAuto, isNestedDispatch, isEffortUnsupported, withEffortOverride } from '../../core/dispatch.js';
 import { listDispatchAgentIds } from '../../core/dispatch-registry.js';
 import { hydrateProjectAgentRegistry } from '../../core/agents.js';
 
 export async function dispatchCommand(
   phase: string,
-  options: { prompt?: string; print?: boolean; json?: boolean } = {},
+  options: { prompt?: string; print?: boolean; json?: boolean; effort?: string } = {},
 ): Promise<void> {
   const projectDir = process.cwd();
   const config = await loadConfig(projectDir);
@@ -14,10 +14,19 @@ export async function dispatchCommand(
   await hydrateProjectAgentRegistry(projectDir, {
     extensionNames: config?.extensions?.map(extension => extension.name) ?? [],
   });
-  const r = resolvePhaseDispatch(config, phase);
+  const resolved = resolvePhaseDispatch(config, phase);
+  const r = resolved.kind === 'resolved'
+    ? { ...resolved, value: withEffortOverride(resolved.value, options.effort) }
+    : resolved;
   const result = (status: string, details: Record<string, unknown> = {}): void => {
     if (options.json) console.log(JSON.stringify({ schema_version: 1, phase, status, ...details }));
   };
+
+  if (options.effort !== undefined && options.effort.trim() === '') {
+    console.error('--effort must not be empty. Use a level such as low, medium, high, xhigh, or max.');
+    result('error', { reason: 'invalid-effort' });
+    process.exitCode = 2; return;
+  }
 
   // Inside a child auto-dispatched for this same phase: run in-process, never re-dispatch.
   if (r.kind === 'resolved' && isNestedDispatch(r.value.phase)) {
@@ -51,6 +60,9 @@ export async function dispatchCommand(
             ? 'Review the latest changes.'
             : `Run the ${r.value.phase} phase of the aif-loop.`;
       const prompt = options.prompt ?? defaultPrompt;
+      if (r.value.askEffort && !options.print && r.value.mode === 'auto') {
+        console.error(`Effort for phase '${r.value.phase}' is "ask" but no --effort was given; using the model default.`);
+      }
       if (isEffortUnsupported(r.value)) {
         console.error(`Effort '${r.value.effort}' for phase '${r.value.phase}' is not passed: ` +
           `agent '${r.value.spec.id}' command has no {effort} placeholder. ` +
@@ -61,6 +73,7 @@ export async function dispatchCommand(
         if (options.json) {
           result('manual', { agent: r.value.spec.id, model: r.value.model,
             ...(r.value.effort ? { effort: r.value.effort } : {}),
+            ...(r.value.askEffort ? { effort_ask: true } : {}),
             command: buildAgentCommand(r.value.spec,
               { model: r.value.model, phase: r.value.phase, prompt, effort: r.value.effort }),
             instructions });

@@ -673,12 +673,12 @@ and `upgrade` preserve these fields; they are user-owned, not managed installati
 ```
 
 - `dispatch` — `manual` (default) prints instructions and never spawns anything; `auto` spawns the target CLI. Any invalid value behaves as `manual`.
-- `phases.<phase>` — targets per phase. Valid phases: `plan`, `produce`, `prepare`, `evaluate`, `critique`, `refine` (aif-loop) plus `spec-plan`, `implement`, `review` (spec-driven workflow: `/aif-plan`, `/aif-implement`, `/aif-review`). `plan` belongs to aif-loop only; `/aif-plan` reads `spec-plan`. `model` falls back to the agent's `defaultModel`; `effort` is optional and is passed only through an `{effort}` placeholder (the built-in `claude-code` command passes it as `--effort=<level>`: `low`, `medium`, `high`, `xhigh`, `max`). An `effort` set for an agent whose command has no `{effort}` placeholder is reported on stderr instead of being silently ignored; `timeoutMs` is a positive integer cap for auto spawns (default 600000).
+- `phases.<phase>` — targets per phase. Valid phases: `plan`, `produce`, `prepare`, `evaluate`, `critique`, `refine` (aif-loop) plus `spec-plan`, `implement`, `review` (spec-driven workflow: `/aif-plan`, `/aif-implement`, `/aif-review`). `plan` belongs to aif-loop only; `/aif-plan` reads `spec-plan`. `model` falls back to the agent's `defaultModel`; `effort` is optional and is passed only through an `{effort}` placeholder (the built-in `claude-code` command passes it as `--effort=<level>`: `low`, `medium`, `high`, `xhigh`, `max`). An `effort` set for an agent whose command has no `{effort}` placeholder is reported on stderr instead of being silently ignored. Set `"effort": "ask"` to choose the level on each run: `/aif-plan`, `/aif-implement`, and `/aif-review` then ask which effort to use before dispatching (non-interactive runs skip the question and use the model default); `timeoutMs` is a positive integer cap for auto spawns (default 600000).
 - `dispatchAgents` — per-agent `command` / `defaultModel` overrides. Built-in dispatch ids: `claude-code`, `gemini-cli`, `antigravity`, `chatgpt-cli`, `openrouter-cli`. An agent id that resolves to an installed runtime (including extension-provided ones) maps through its `skillsCliAgent`.
 
 `command` is an **argv template, not a shell string**: it is split on whitespace, then `{model}`, `{phase}`, `{prompt}`, `{effort}` are substituted per token in one pass. `{effort}` is optional: a token that contains it is dropped when the phase sets no `effort`, so write it as one token such as `--effort={effort}`. Values remain literal, including `$$`, `$&` and placeholder-like text inside a prompt/model. Quotes and shell metacharacters have no special meaning, and paths with spaces cannot be expressed as one token; prompts always travel as a single argv element, never through a shell.
 
-`ai-factory dispatch <phase> [--prompt <text>] [--print] [--json]` resolves one phase:
+`ai-factory dispatch <phase> [--prompt <text>] [--effort <level>] [--print] [--json]` resolves one phase. `--effort` overrides the phase `effort` for this run, including `"ask"`; an empty value exits 2 with `reason: invalid-effort`. With `"effort": "ask"` and no `--effort`, auto mode runs on the model default and says so on stderr:
 
 - no dispatch config or no phase entry → exit 0 with empty stdout and stderr (a fully silent no-op, so callers treat it as "continue in-process");
 - manual mode or `--print` → a structured `Command:` / `Args:` block on stdout, one argv element per line, copy-safe for prompts with quotes, `$()`, or semicolons;
@@ -691,7 +691,7 @@ exactly one object with `schema_version: 1`, the requested `phase`, and `status`
 | Status | Meaning | Additional fields |
 |---|---|---|
 | `noop` | Execute the phase in-process | `reason`: `no-config`, `no-phase-entry`, or `nested-dispatch` |
-| `manual` | No child was started | `agent`, `model`, `effort` (only when set), `command: {file, args}`, `instructions` |
+| `manual` | No child was started | `agent`, `model`, `effort` (only when set), `effort_ask: true` (effort is `"ask"` and no `--effort` was given), `command: {file, args}`, `instructions` |
 | `completed` | The child exited successfully | Phase output still requires validation |
 | `error` | Resolution or child execution failed | `reason` or `error`; non-zero exit |
 

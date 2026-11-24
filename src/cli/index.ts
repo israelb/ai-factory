@@ -25,6 +25,7 @@ program
   .description('Resolve the agent/model for a workflow or loop phase and switch or spawn it')
   .option('--prompt <text>', 'Instruction passed to the target agent (fills {prompt})')
   .option('--print', 'Force manual mode: print instructions, never spawn')
+  .option('--effort <level>', 'Effort for this run (fills {effort}); overrides the phase effort, including "ask"')
   .option('--json', 'Emit one dispatcher result on stdout; send child output to stderr')
   .action(dispatchCommand);
 

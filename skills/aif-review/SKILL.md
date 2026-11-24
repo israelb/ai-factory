@@ -54,8 +54,18 @@ Lets `.ai-factory.json` route the review to another agent or model through
 After Step 0 and before collecting the diff, run it once unless the invoking request
 says it is the dispatched `review` phase:
 
+**Probe and effort question.** First run the non-spawning probe
+`ai-factory dispatch review --json --print`. `noop` means no dispatch: continue
+in-process without a second call. If it returns `effort_ask: true` (the phase sets
+`"effort": "ask"`) and this is an interactive session, ask one single-select question
+with the runtime-aware question contract before anything else:
+`Which effort for the review phase?` with the options `low`, `medium`, `high`, `xhigh`, `max`.
+Then add `--effort <chosen level>` to the dispatch command below. Non-interactive runs
+(`HANDOFF_MODE=1`, or no question tool) skip the question and omit `--effort`; the agent
+then uses its model default.
+
 ```
-ai-factory dispatch review --json --prompt "<handoff>"
+ai-factory dispatch review --json [--effort <level>] --prompt "<handoff>"
 ```
 
 `<handoff>` is one argv element: `This is the dispatched review phase. Run /aif-review

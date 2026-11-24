@@ -338,7 +338,8 @@ The setup, implement, verify, and fix entrypoints select their detailed referenc
 `ai-factory dispatch <phase> --json` before doing their work, with the phases
 `spec-plan`, `implement`, and `review`. Configure `phases.<phase>` in
 `.ai-factory.json` to run that step with another agent, model, or effort, for example
-`"spec-plan": { "agent": "claude-code", "model": "fable", "effort": "high" }`. Without an
+`"spec-plan": { "agent": "claude-code", "model": "fable", "effort": "high" }`. Use
+`"effort": "ask"` to pick the effort from a question each time the step runs. Without an
 entry the step runs in the current session. `manual` prints the target command and
 stops; `completed` means the child ran the step, so the parent only reports its
 result; errors fall back in-process. See
