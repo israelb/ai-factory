@@ -2,7 +2,7 @@
 name: aif-plan
 description: Plan a feature or task in fast, full, or ultra mode. Ultra creates an indexed multi-file bundle with deeply specified phases for execution by a smaller model. Use for "plan", "new feature", "start feature", "create tasks", or exhaustive implementation planning.
 argument-hint: "[fast | full | ultra] [+coupling] [--parallel | --list | --cleanup <branch>] <description>"
-allowed-tools: Read Write Glob Grep Bash(git *) Bash(cd *) Bash(cp *) Bash(mkdir *) Bash(basename *) Bash(shasum -a 256 *) Bash(sha256sum *) TaskCreate TaskUpdate TaskList AskUserQuestion Questions Task mcp__handoff__handoff_sync_status mcp__handoff__handoff_push_plan mcp__handoff__handoff_get_task mcp__handoff__handoff_list_tasks mcp__handoff__handoff_update_task
+allowed-tools: Read Write Glob Grep Bash(git *) Bash(cd *) Bash(cp *) Bash(mkdir *) Bash(basename *) Bash(shasum -a 256 *) Bash(sha256sum *) Bash(ai-factory dispatch *) TaskCreate TaskUpdate TaskList AskUserQuestion Questions Task mcp__handoff__handoff_sync_status mcp__handoff__handoff_push_plan mcp__handoff__handoff_get_task mcp__handoff__handoff_list_tasks mcp__handoff__handoff_update_task
 disable-model-invocation: false
 version: 1.0.0
 ---
@@ -343,6 +343,38 @@ non-interactive defaults would otherwise skip optional linkage. It does not chan
 any other planning permissions or preferences.
 
 For concrete parsing examples and expected behavior per command shape, read `references/EXAMPLES.md` (Argument Parsing).
+
+### Step 0.3: Optional Phase Dispatch (`spec-plan`)
+
+Lets `.ai-factory.json` route planning to another agent or model through `phases.spec-plan`
+(for example `{ "agent": "claude-code", "model": "fable", "effort": "high" }`). Without that entry,
+this step is a silent no-op and planning continues in this session.
+
+Skip this step for `--list` and `--cleanup`, when `HANDOFF_MODE` is `1`, and when the
+request that invoked this skill says it is the dispatched `spec-plan` phase. Otherwise run
+it once, before Step 1 and before any question, branch, worktree, or file write:
+
+```
+ai-factory dispatch spec-plan --json --prompt "<handoff>"
+```
+
+`<handoff>` is one argv element: `This is the dispatched spec-plan phase. Run /aif-plan
+in-process in this agent and do not call ai-factory dispatch. Arguments:` followed by
+the original `$ARGUMENTS` verbatim. Never summarize or rewrite the arguments.
+
+Route only on the dispatcher JSON printed on stdout (`status`). Never parse child output
+as status: in JSON mode it goes to stderr and may contain arbitrary text.
+
+- `noop` → continue with Step 1 in-process.
+- `manual` → show the returned `instructions` verbatim and STOP. Write no plan.
+- `completed` → do not plan again. Resolve the plan artifact using the existing discovery
+  rules (Step 1.2 / Step 5 paths), confirm it was created or updated in this run, and show
+  Step 6 for it. If no such artifact exists, report that and continue in-process.
+- `error`, a non-zero exit, invalid JSON, or an unavailable `ai-factory` CLI → warn once
+  and continue in-process. Dispatch never blocks planning.
+
+An auto-dispatched child runs non-interactively. It uses non-interactive defaults and
+lists unresolved required decisions in its output instead of asking.
 
 ---
 

@@ -1,5 +1,5 @@
 import { loadConfig, DISPATCH_PHASES } from '../../core/config.js';
-import { resolvePhaseDispatch, formatManualInstructions, buildAgentCommand, runAuto } from '../../core/dispatch.js';
+import { resolvePhaseDispatch, formatManualInstructions, buildAgentCommand, runAuto, isNestedDispatch, isEffortUnsupported } from '../../core/dispatch.js';
 import { listDispatchAgentIds } from '../../core/dispatch-registry.js';
 import { hydrateProjectAgentRegistry } from '../../core/agents.js';
 
@@ -19,6 +19,12 @@ export async function dispatchCommand(
     if (options.json) console.log(JSON.stringify({ schema_version: 1, phase, status, ...details }));
   };
 
+  // Inside a child auto-dispatched for this same phase: run in-process, never re-dispatch.
+  if (r.kind === 'resolved' && isNestedDispatch(r.value.phase)) {
+    result('noop', { reason: 'nested-dispatch' });
+    return;
+  }
+
   switch (r.kind) {
     case 'unknown-phase':
       console.error(`Unknown phase '${r.phase}'. Valid phases: ${DISPATCH_PHASES.join(', ')}`);
@@ -37,17 +43,26 @@ export async function dispatchCommand(
       result('error', { reason: r.kind });
       process.exitCode = 2; return;
     case 'resolved': {
-      const defaultPrompt = r.value.phase === 'implement'
-        ? 'Implement the current plan.'
-        : r.value.phase === 'review'
-          ? 'Review the latest changes.'
-          : `Run the ${r.value.phase} phase of the aif-loop.`;
+      const defaultPrompt = r.value.phase === 'spec-plan'
+        ? 'Create an implementation plan for the current task.'
+        : r.value.phase === 'implement'
+          ? 'Implement the current plan.'
+          : r.value.phase === 'review'
+            ? 'Review the latest changes.'
+            : `Run the ${r.value.phase} phase of the aif-loop.`;
       const prompt = options.prompt ?? defaultPrompt;
+      if (isEffortUnsupported(r.value)) {
+        console.error(`Effort '${r.value.effort}' for phase '${r.value.phase}' is not passed: ` +
+          `agent '${r.value.spec.id}' command has no {effort} placeholder. ` +
+          `Add one under "dispatchAgents" in .ai-factory.json.`);
+      }
       if (options.print || r.value.mode === 'manual') {
         const instructions = formatManualInstructions(r.value, prompt);
         if (options.json) {
           result('manual', { agent: r.value.spec.id, model: r.value.model,
-            command: buildAgentCommand(r.value.spec, { model: r.value.model, phase: r.value.phase, prompt }),
+            ...(r.value.effort ? { effort: r.value.effort } : {}),
+            command: buildAgentCommand(r.value.spec,
+              { model: r.value.model, phase: r.value.phase, prompt, effort: r.value.effort }),
             instructions });
         } else console.log(instructions);
         return; // exit 0

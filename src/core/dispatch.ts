@@ -7,6 +7,7 @@ export interface ResolvedDispatch {
   mode: DispatchMode;
   spec: AgentRunSpec;
   model: string;
+  effort: string; // '' when not configured
   timeoutMs: number;
 }
 
@@ -26,6 +27,17 @@ function debugDispatch(event: string, details: Record<string, unknown>): void {
   }
 }
 
+/**
+ * Set on every auto-dispatched child. A child that asks to dispatch the same phase again
+ * (e.g. a dispatched /aif-plan calling `ai-factory dispatch spec-plan`) gets a no-op, so it
+ * runs in-process instead of spawning itself recursively.
+ */
+export const DISPATCHED_PHASE_ENV = 'AI_FACTORY_DISPATCHED_PHASE';
+
+export function isNestedDispatch(phase: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[DISPATCHED_PHASE_ENV] === phase;
+}
+
 export function isDispatchPhase(v: string): v is DispatchPhase {
   return (DISPATCH_PHASES as readonly string[]).includes(v);
 }
@@ -39,10 +51,16 @@ export function resolvePhaseDispatch(config: AiFactoryConfig | null, phase: stri
   if (!spec) return { kind: 'unknown-agent', phase, agent: entry.agent };
   const model = entry.model ?? spec.defaultModel;
   const timeoutMs = entry.timeoutMs ?? DEFAULT_DISPATCH_TIMEOUT_MS;
-  return { kind: 'resolved', value: { phase, mode: config.dispatch, spec, model, timeoutMs } };
+  const effort = entry.effort ?? '';
+  return { kind: 'resolved', value: { phase, mode: config.dispatch, spec, model, effort, timeoutMs } };
 }
 
-export interface BuildContext { model: string; phase: DispatchPhase; prompt: string; }
+export interface BuildContext { model: string; phase: DispatchPhase; prompt: string; effort?: string; }
+
+/** True when an effort is configured but the agent template cannot pass it. */
+export function isEffortUnsupported(r: ResolvedDispatch): boolean {
+  return r.effort !== '' && !r.spec.command.includes('{effort}');
+}
 export interface BuiltCommand { file: string; args: string[]; }
 
 // Tokenize template on whitespace FIRST, then substitute per-token → {prompt} with spaces stays ONE argv arg.
@@ -51,9 +69,12 @@ export interface BuiltCommand { file: string; args: string[]; }
 export function buildAgentCommand(spec: AgentRunSpec, ctx: BuildContext): BuiltCommand {
   debugDispatch('build', { phase: ctx.phase, promptBytes: Buffer.byteLength(ctx.prompt) });
   // One callback pass keeps replacement syntax and placeholders inside values literal.
-  const subst = (t: string) => t.replace(/\{(model|phase|prompt)\}/g,
-    (_match, key: keyof BuildContext) => ctx[key]);
-  const tokens = spec.command.trim().split(/\s+/);
+  const values: Record<string, string> = { model: ctx.model, phase: ctx.phase, prompt: ctx.prompt,
+    effort: ctx.effort ?? '' };
+  const subst = (t: string) => t.replace(/\{(model|phase|prompt|effort)\}/g, (_match, key: string) => values[key]);
+  // {effort} is optional: a token that carries it is dropped when no effort is configured.
+  const tokens = spec.command.trim().split(/\s+/)
+    .filter(token => values.effort !== '' || !token.includes('{effort}'));
   const [file, ...rest] = tokens.map(subst);
   debugDispatch('built', { phase: ctx.phase, argumentCount: rest.length });
   return { file, args: rest };
@@ -63,6 +84,8 @@ export function buildAgentCommand(spec: AgentRunSpec, ctx: BuildContext): BuiltC
 // the aif-loop phases resume the loop.
 function resumeHint(phase: DispatchPhase): string {
   switch (phase) {
+    case 'spec-plan':
+      return 'Then run /aif-plan in that agent.';
     case 'implement':
       return 'Then run /aif-implement in that agent.';
     case 'review':
@@ -79,11 +102,12 @@ export function formatCommandBlock(b: BuiltCommand): string {
 }
 
 export function formatManualInstructions(r: ResolvedDispatch, prompt: string): string {
-  const b = buildAgentCommand(r.spec, { model: r.model, phase: r.phase, prompt });
+  const b = buildAgentCommand(r.spec, { model: r.model, phase: r.phase, prompt, effort: r.effort });
   return [
     `── Cross-agent dispatch: ${r.phase} ──`,
     `Agent : ${r.spec.displayName} (${r.spec.id})`,
     `Model : ${r.model}`,
+    ...(r.effort ? [`Effort : ${r.effort}`] : []),
     `Mode  : manual`,
     ``,
     `Switch to this agent for the ${r.phase} phase, then invoke (each argument is one argv element, not shell text):`,
@@ -96,10 +120,11 @@ export function formatManualInstructions(r: ResolvedDispatch, prompt: string): s
 export interface RunResult { ok: boolean; code: number | null; error?: string; }
 
 export function runAuto(r: ResolvedDispatch, prompt: string, options: { json?: boolean } = {}): RunResult {
-  const { file, args } = buildAgentCommand(r.spec, { model: r.model, phase: r.phase, prompt });
+  const { file, args } = buildAgentCommand(r.spec, { model: r.model, phase: r.phase, prompt, effort: r.effort });
   debugDispatch('start', { phase: r.phase, timeoutMs: r.timeoutMs });
   try {
     execFileSync(file, args, {
+      env: { ...process.env, [DISPATCHED_PHASE_ENV]: r.phase },
       // In JSON mode stdout belongs exclusively to the dispatcher result.
       stdio: ['inherit', options.json ? 2 : 'inherit', 'inherit'],
       timeout: r.timeoutMs,

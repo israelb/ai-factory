@@ -274,6 +274,18 @@ Context-gate defaults for `/aif-commit`, `/aif-review`, `/aif-verify`:
 
 The setup, implement, verify, and fix entrypoints select their detailed references by mode. Load the selected procedure before its step; do not read every reference at startup. Mode boundaries, artifact ownership, ultra marker checks, regression-first fallbacks, and exact handoffs remain mandatory. Missing selected references stop the dependent step. See [selective workflow references](skills.md#workflow-skills) for installation details and reproducible footprint measurements.
 
+### Per-step agent and model
+
+`/aif-plan`, `/aif-implement`, and `/aif-review` each call
+`ai-factory dispatch <phase> --json` before doing their work, with the phases
+`spec-plan`, `implement`, and `review`. Configure `phases.<phase>` in
+`.ai-factory.json` to run that step with another agent, model, or effort, for example
+`"spec-plan": { "agent": "claude-code", "model": "fable", "effort": "high" }`. Without an
+entry the step runs in the current session. `manual` prints the target command and
+stops; `completed` means the child ran the step, so the parent only reports its
+result; errors fall back in-process. See
+[Cross-Agent Dispatch](configuration.md#cross-agent-dispatch).
+
 These skills form the development pipeline. Each one feeds into the next.
 
 ### `/aif-explore [regular|ultra] [topic or plan name]` — discovery before planning
