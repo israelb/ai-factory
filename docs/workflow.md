@@ -239,6 +239,64 @@ Agent mode reads `agent-context.md` and `agent-history.md` first, asks the user 
 
 QA check results are bound to the tested commit plus worktree digest, or to a manual build identifier when git is unavailable, plus source/case/replay digests, so stale passes are not counted after the branch, dirty working tree, target, replay script, or test cases change.
 
+## From Plan to Commit
+
+`/aif-plan` decides how the work is split and committed; `/aif-implement` executes
+that decision.
+
+**1. Pick a plan mode.** `workflow.plan_mode` in `config.yaml` sets the default, or
+pass it as the first word:
+
+| Mode | Plan artifact | Branch | Questions |
+|---|---|---|---|
+| `fast` | `paths.plan` (default `.ai-factory/PLAN.md`) | none | tests, constraints, roadmap link |
+| `full` | `paths.plans/<id>.md` | optional (`git.create_branches`) | tests, logging, docs, commit strategy, methodology, roadmap link |
+| `ultra` | `paths.plans/<id>/index.md` plus one file per phase | optional | same as `full`, with every implementation decision resolved up front |
+
+**2. Choose a commit strategy** (full and ultra ask; fast uses the default):
+
+- `incremental` (default) — commit points sit between groups of related tasks.
+- `incremental-at-end` — the same groups, all committed after the implementation.
+- `single-commit` — one commit after everything.
+
+The plan records it under `## Settings` as `Commit strategy:`. Commit points are
+either a `## Commit Plan` section (`workflow.plan_structure: classic`, default) or
+explicit commit tasks (`task-based`).
+
+**3. Run `/aif-implement`.** It works one task at a time:
+
+1. Reads the next pending task and its full specification.
+2. Implements and verifies it, then ticks its checkbox in the plan right away.
+3. At a commit point it stops and asks before committing:
+   - classic plans: *commit now*, *continue without committing*, or *skip all checkpoints*;
+   - task-based plans: `/aif-commit` shows the planned message and the task group,
+     with *Commit this group* or *Cancel*.
+
+That question is where you review local changes: run `git diff` before you answer.
+The commit includes only that group's changes; unrelated staged or unstaged work is
+left alone, and the result is checked against what was captured before committing.
+
+**4. Stop and resume freely.** Progress lives in the plan checkboxes, so
+`/aif-implement` in a new session continues with the next unfinished task.
+`/aif-implement status` shows progress without changing anything.
+
+**5. Close.** `/aif-verify` checks completeness against the plan; `/aif-review` and
+`/aif-commit` remain available for ad-hoc review and commits.
+
+## Who Recommends New Skills
+
+Three skills share this job, each at a different moment:
+
+| When | Skill | What it does |
+|---|---|---|
+| Project setup | `/aif` | Analyzes the stack and recommends skills. For each one it searches [skills.sh](https://skills.sh), installs and security-scans what it finds, and generates the rest with `/aif-skill-generator`. |
+| After real use | `/aif-evolve` | Reads accumulated `/aif-fix` patches. When a pattern keeps recurring it *suggests* a dedicated skill, but never creates one itself. |
+| On demand | `/aif-skill-generator` | Creates the skill (`search <query>` looks on skills.sh first; given URLs it learns from that documentation). |
+
+Installing an external skill requires Python 3 for the security scanner. Without it,
+acquisition stops before anything untrusted is used. Built-in `aif-*` skills are
+never scanned. See [Security](security.md).
+
 ## Artifact Ownership and Context Gates
 
 Ownership is command-scoped to avoid conflicting writers:
