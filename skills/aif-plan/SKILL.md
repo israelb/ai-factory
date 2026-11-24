@@ -347,15 +347,26 @@ For concrete parsing examples and expected behavior per command shape, read `ref
 ### Step 0.3: Optional Phase Dispatch (`spec-plan`)
 
 Lets `.ai-factory.json` route planning to another agent or model through `phases.spec-plan`
-(for example `{ "agent": "claude-code", "model": "fable", "effort": "high" }`). Without that entry,
+(for example `{ "agent": "claude-code", "model": "fable", "effort": "high" }`, or `"effort": "ask"`
+to choose the effort on each run). Without that entry,
 this step is a silent no-op and planning continues in this session.
 
 Skip this step for `--list` and `--cleanup`, when `HANDOFF_MODE` is `1`, and when the
 request that invoked this skill says it is the dispatched `spec-plan` phase. Otherwise run
 it once, before Step 1 and before any question, branch, worktree, or file write:
 
+**Probe and effort question.** First run the non-spawning probe
+`ai-factory dispatch spec-plan --json --print`. `noop` means no dispatch: continue
+in-process without a second call. If it returns `effort_ask: true` (the phase sets
+`"effort": "ask"`) and this is an interactive session, ask one single-select question
+with the runtime-aware question contract before anything else:
+`Which effort for the spec-plan phase?` with the options `low`, `medium`, `high`, `xhigh`, `max`.
+Then add `--effort <chosen level>` to the dispatch command below. Non-interactive runs
+(`HANDOFF_MODE=1`, or no question tool) skip the question and omit `--effort`; the agent
+then uses its model default.
+
 ```
-ai-factory dispatch spec-plan --json --prompt "<handoff>"
+ai-factory dispatch spec-plan --json [--effort <level>] --prompt "<handoff>"
 ```
 
 `<handoff>` is one argv element: `This is the dispatched spec-plan phase. Run /aif-plan

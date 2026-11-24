@@ -252,6 +252,60 @@ try {
       ['--model', 'claude-fable-5-2', '--prompt', 'p']);
   });
 
+  const claudeAsk = (effort) => ({version: '2.22.0', agents: [], dispatch: 'manual',
+    phases: {'spec-plan': {agent: 'claude-code', model: 'fable', effort}}});
+
+  check('--effort overrides the configured effort for one run', () => {
+    const result = cli(project('effort-override', claudeAsk('high')), 'spec-plan', '--json', '--effort', 'low',
+      '--prompt', 'x');
+    assert.equal(result.status, 0);
+    const body = JSON.parse(result.stdout);
+    assert.equal(body.effort, 'low');
+    assert.equal('effort_ask' in body, false);
+    assert.deepEqual(body.command, {file: 'claude', args: ['--model', 'fable', '--effort=low', '-p', 'x']});
+  });
+
+  check('effort "ask" without --effort reports effort_ask and passes no effort', () => {
+    const result = cli(project('effort-ask', claudeAsk('ask')), 'spec-plan', '--json', '--print', '--prompt', 'x');
+    assert.equal(result.status, 0);
+    const body = JSON.parse(result.stdout);
+    assert.equal(body.status, 'manual');
+    assert.equal(body.effort_ask, true);
+    assert.equal('effort' in body, false);
+    assert.deepEqual(body.command, {file: 'claude', args: ['--model', 'fable', '-p', 'x']});
+    assert.match(body.instructions, /Effort : ask \(choose with --effort\)/);
+    assert.equal(result.stderr, '');
+  });
+
+  check('effort "ask" with --effort uses the chosen level', () => {
+    const result = cli(project('effort-ask-chosen', claudeAsk('ask')), 'spec-plan', '--json', '--effort', 'xhigh',
+      '--prompt', 'x');
+    const body = JSON.parse(result.stdout);
+    assert.equal(body.effort, 'xhigh');
+    assert.equal('effort_ask' in body, false);
+    assert.deepEqual(body.command, {file: 'claude', args: ['--model', 'fable', '--effort=xhigh', '-p', 'x']});
+  });
+
+  check('auto with effort "ask" and no --effort runs on the model default and says so', () => {
+    const settings = specPlanConfig('auto');
+    settings.dispatchAgents.fake.command = 'node agent.cjs --model {model} --effort={effort} --prompt {prompt}';
+    settings.phases['spec-plan'].effort = 'ask';
+    const cwd = project('effort-ask-auto', settings);
+    const result = cli(cwd, 'spec-plan', '--json', '--prompt', 'p');
+    assert.equal(result.status, 0);
+    assert.deepEqual(JSON.parse(result.stdout), {schema_version: 1, phase: 'spec-plan', status: 'completed'});
+    assert.match(result.stderr, /Effort for phase 'spec-plan' is "ask" but no --effort was given; using the model default\./);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(cwd, 'argv.json'), 'utf8')),
+      ['--model', 'claude-fable-5-2', '--prompt', 'p']);
+  });
+
+  check('an empty --effort is rejected', () => {
+    const result = cli(project('effort-empty', claudeAsk('high')), 'spec-plan', '--json', '--effort', '');
+    assert.equal(result.status, 2);
+    assert.deepEqual(JSON.parse(result.stdout), {schema_version: 1, phase: 'spec-plan', status: 'error', reason: 'invalid-effort'});
+    assert.match(result.stderr, /--effort must not be empty/);
+  });
+
   if (process.platform === 'win32') {
     skipped++;
     console.log('SKIP POSIX child ignoring SIGTERM: Windows forcibly terminates it');

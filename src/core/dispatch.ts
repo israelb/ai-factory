@@ -7,7 +7,8 @@ export interface ResolvedDispatch {
   mode: DispatchMode;
   spec: AgentRunSpec;
   model: string;
-  effort: string; // '' when not configured
+  effort: string; // '' when not configured or when it must be asked for
+  askEffort: boolean; // phase effort is "ask" and no --effort was supplied yet
   timeoutMs: number;
 }
 
@@ -38,6 +39,14 @@ export function isNestedDispatch(phase: string, env: NodeJS.ProcessEnv = process
   return env[DISPATCHED_PHASE_ENV] === phase;
 }
 
+/** Phase effort value meaning "ask the user which effort to use before dispatching". */
+export const EFFORT_ASK = 'ask';
+
+/** Applies a per-run `--effort` choice; it always wins over the configured value, including "ask". */
+export function withEffortOverride(r: ResolvedDispatch, effort: string | undefined): ResolvedDispatch {
+  return effort === undefined ? r : { ...r, effort, askEffort: false };
+}
+
 export function isDispatchPhase(v: string): v is DispatchPhase {
   return (DISPATCH_PHASES as readonly string[]).includes(v);
 }
@@ -51,8 +60,9 @@ export function resolvePhaseDispatch(config: AiFactoryConfig | null, phase: stri
   if (!spec) return { kind: 'unknown-agent', phase, agent: entry.agent };
   const model = entry.model ?? spec.defaultModel;
   const timeoutMs = entry.timeoutMs ?? DEFAULT_DISPATCH_TIMEOUT_MS;
-  const effort = entry.effort ?? '';
-  return { kind: 'resolved', value: { phase, mode: config.dispatch, spec, model, effort, timeoutMs } };
+  const askEffort = entry.effort === EFFORT_ASK;
+  const effort = askEffort ? '' : entry.effort ?? '';
+  return { kind: 'resolved', value: { phase, mode: config.dispatch, spec, model, effort, askEffort, timeoutMs } };
 }
 
 export interface BuildContext { model: string; phase: DispatchPhase; prompt: string; effort?: string; }
@@ -107,7 +117,7 @@ export function formatManualInstructions(r: ResolvedDispatch, prompt: string): s
     `── Cross-agent dispatch: ${r.phase} ──`,
     `Agent : ${r.spec.displayName} (${r.spec.id})`,
     `Model : ${r.model}`,
-    ...(r.effort ? [`Effort : ${r.effort}`] : []),
+    ...(r.effort ? [`Effort : ${r.effort}`] : r.askEffort ? ['Effort : ask (choose with --effort)'] : []),
     `Mode  : manual`,
     ``,
     `Switch to this agent for the ${r.phase} phase, then invoke (each argument is one argv element, not shell text):`,
