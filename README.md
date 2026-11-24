@@ -111,6 +111,21 @@ Need CLI flags, update/upgrade details, or extension commands? See [Getting Star
 
 See the full [Development Workflow](docs/workflow.md) with diagram and decision table.
 
+### How the pieces fit together
+
+| Step | What it does | What it writes |
+|---|---|---|
+| `/aif` | Sets up project context and recommends skills | `.ai-factory/DESCRIPTION.md`, `ARCHITECTURE.md`, `AGENTS.md`, installed skills |
+| `/aif-plan` | Turns a request into tasks and commit points | `PLAN.md` (fast) or `plans/<id>.md` / `plans/<id>/` (full / ultra) |
+| `/aif-implement` | Runs one task at a time and asks before each commit | your code, plan checkboxes |
+| `/aif-verify`, `/aif-review` | Check completeness and quality | nothing by default (read-only gates) |
+| `/aif-fix` → `/aif-evolve` | Fix bugs, then turn lessons into project rules for skills | `patches/`, `skill-context/` |
+
+- **Plans, tasks and commits** — modes, commit strategies, and where you review changes: [From Plan to Commit](docs/workflow.md#from-plan-to-commit).
+- **New skills** — who recommends, installs, and generates them: [Who Recommends New Skills](docs/workflow.md#who-recommends-new-skills).
+- **Who may change which file** — [Artifact Ownership](docs/workflow.md#artifact-ownership-and-context-gates).
+- **A different model or effort per step** — for example planning with Fable at high effort: [Per-step agent and model](docs/workflow.md#per-step-agent-and-model).
+
 ---
 
 ## Skills only via skills.sh
